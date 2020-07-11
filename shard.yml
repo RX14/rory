@@ -1,0 +1,13 @@
+name: rory
+version: 0.1.0
+
+authors:
+  - Stephanie Wilde-Hobbs <steph@rx14.co.uk>
+
+targets:
+  rory:
+    main: src/entrypoint.cr
+
+crystal: 0.35.1
+
+license: MIT
