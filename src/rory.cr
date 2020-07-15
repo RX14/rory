@@ -4,3 +4,4 @@ end
 
 require "./xattr"
 require "./proquint"
+require "./server"
