@@ -1,15 +1,22 @@
 require "./spec_helper"
 
-private def request(method, resource, headers = nil, body = nil) : HTTP::Client::Response
+private def request(method, resource,
+                    headers = HTTP::Headers.new, body = nil,
+                    *, authorized = true) : HTTP::Client::Response
   server = Rory::Server.new(
     host: "localhost",
     port: 0,
     storage_path: Path.new(ENV["RORY_STORAGE_PATH"]),
-    url_base: "https://example.com/"
+    url_base: "https://example.com/",
+    allowed_tokens: ["bearer:test_token"]
   )
 
   middleware = HTTP::Server.build_middleware([HTTP::ErrorHandler.new(verbose: true)], ->server.request(HTTP::Server::Context))
   processor = HTTP::Server::RequestProcessor.new(middleware)
+
+  if authorized
+    headers["Authorization"] = "Bearer test_token"
+  end
 
   input = IO::Memory.new
   HTTP::Request.new(method, resource, headers, body).to_io(input)
@@ -155,6 +162,54 @@ describe Rory::Server do
         response.body.should eq("File name \"test.cr\" already exists")
 
         check_file("https://example.com/test.cr", "foo", "text/plain")
+      end
+    end
+
+    describe "authentication" do
+      it "errors on missing authorization" do
+        response = request("POST", "/upload", authorized: false)
+        response.status.should eq(HTTP::Status::UNAUTHORIZED)
+
+        response.content_type.should eq("text/plain")
+        response.body.should eq("Authorization required")
+
+        response.headers["WWW-Authenticate"].should eq(%[Bearer realm="example"])
+      end
+
+      it "errors on non-Bearer scheme" do
+        response = request("POST", "/upload", HTTP::Headers{"Authorization" => "Digest foo"}, authorized: false)
+        response.status.should eq(HTTP::Status::UNAUTHORIZED)
+
+        response.content_type.should eq("text/plain")
+        response.body.should eq("Authentication must use Bearer scheme")
+
+        response.headers["WWW-Authenticate"].should eq(%[Bearer realm="example"])
+      end
+
+      it "errors on no Bearer token" do
+        response = request("POST", "/upload", HTTP::Headers{"Authorization" => "Bearer"}, authorized: false)
+        response.status.should eq(HTTP::Status::BAD_REQUEST)
+
+        response.content_type.should eq("text/plain")
+        response.body.should eq("Invalid syntax for Bearer authentication scheme")
+      end
+
+      it "errors on invalid Bearer syntax" do
+        response = request("POST", "/upload", HTTP::Headers{"Authorization" => "Bearer aaa a"}, authorized: false)
+        response.status.should eq(HTTP::Status::BAD_REQUEST)
+
+        response.content_type.should eq("text/plain")
+        response.body.should eq("Invalid syntax for Bearer authentication scheme")
+      end
+
+      it "errors in invalid token" do
+        response = request("POST", "/upload", HTTP::Headers{"Authorization" => "Bearer foo"}, authorized: false)
+        response.status.should eq(HTTP::Status::UNAUTHORIZED)
+
+        response.content_type.should eq("text/plain")
+        response.body.should eq("Invalid Bearer token")
+
+        response.headers["WWW-Authenticate"].should eq(%[Bearer realm="example", error="invalid_token"])
       end
     end
 

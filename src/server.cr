@@ -5,10 +5,19 @@ class Rory::Server
   getter port : Int32
   getter storage_path : Path
   getter url_base : URI
+  getter allowed_bearer_tokens = Array(String).new
 
-  def initialize(@host, @port, storage_path, url_base)
+  def initialize(@host, @port, storage_path, url_base, allowed_tokens)
     @storage_path = Path.new(storage_path.to_s)
     @url_base = URI.parse(url_base)
+
+    allowed_tokens.each do |token|
+      if bearer_token = token.lchop?("bearer:")
+        allowed_bearer_tokens << bearer_token
+      else
+        raise "unknown token scheme #{token.split(':')[0].inspect} in #{token.inspect}"
+      end
+    end
   end
 
   def start
@@ -34,7 +43,8 @@ class Rory::Server
   end
 
   private def upload_request(ctx)
-    # TODO: auth
+    authenticate_request(ctx)
+
     unless ctx.request.headers["Content-Type"]?.try &.starts_with?("multipart/form-data")
       error(ctx, :unsupported_media_type, "Uploads must be multipart/form-data")
     end
@@ -72,6 +82,31 @@ class Rory::Server
     end
   end
 
+  private def authenticate_request(ctx)
+    authorization = ctx.request.headers["Authorization"]?
+    unless authorization
+      error(ctx, :unauthorized, "Authorization required", {"WWW-Authenticate" => %(Bearer realm="example")})
+    end
+
+    credentials = authorization.split(" ")
+    auth_scheme = credentials[0]
+    token = credentials[1]?
+
+    if auth_scheme != "Bearer"
+      error(ctx, :unauthorized, "Authentication must use Bearer scheme",
+        {"WWW-Authenticate" => %(Bearer realm="example")})
+    end
+
+    if !token || credentials.size > 2
+      error(ctx, :bad_request, "Invalid syntax for Bearer authentication scheme")
+    end
+
+    unless @allowed_bearer_tokens.includes? token
+      error(ctx, :unauthorized, "Invalid Bearer token",
+        {"WWW-Authenticate" => %(Bearer realm="example", error="invalid_token")})
+    end
+  end
+
   private def guess_mime_type(filename)
     process = Process.new("file", {"--mime-type", "--brief", filename.to_s}, output: :pipe, error: :inherit)
     output = process.output.gets_to_end
@@ -80,8 +115,9 @@ class Rory::Server
     output.chomp
   end
 
-  private def error(context, status : HTTP::Status, message : String)
+  private def error(context, status : HTTP::Status, message : String, headers = nil)
     context.response.reset
+    context.response.headers.merge!(headers) if headers
     context.response.status = status
     context.response.content_type = "text/plain"
     context.response << message
