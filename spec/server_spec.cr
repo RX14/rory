@@ -60,8 +60,7 @@ describe Rory::Server do
 
       response.content_type.should eq("text/plain")
       response.body.lines.size.should eq(2)
-      response.body.lines[0].should start_with("https://example.com/")
-      response.body.lines[1].should start_with("https://example.com/")
+      response.body.lines.each &.should start_with("https://example.com/")
 
       path = URI.parse(response.body.lines[0]).path
       File.open(file_path(path)) do |file|
@@ -76,7 +75,7 @@ describe Rory::Server do
       end
     end
 
-    it "guesses mine type" do
+    it "guesses mime type" do
       response = formdata_request("POST", "/upload") do |builder|
         builder.file("file", IO::Memory.new(""))
       end
@@ -90,6 +89,31 @@ describe Rory::Server do
       File.open(file_path(path)) do |file|
         file.gets_to_end.should eq("")
         file.xattr["user.rory_mime_type"].should eq("inode/x-empty")
+      end
+    end
+
+    it "supports user-provided mime type" do
+      response = formdata_request("POST", "/upload") do |builder|
+        builder.file("file", IO::Memory.new(%q({"foo": "bar"})),
+          headers: HTTP::Headers{"Content-Type" => "text/plain"})
+        builder.file("file", IO::Memory.new(%q({"foo": "bar"})))
+      end
+      response.status.should eq(HTTP::Status::OK)
+
+      response.content_type.should eq("text/plain")
+      response.body.lines.size.should eq(2)
+      response.body.lines.each &.should start_with("https://example.com/")
+
+      path = URI.parse(response.body.lines[0]).path
+      File.open(file_path(path)) do |file|
+        file.gets_to_end.should eq(%q({"foo": "bar"}))
+        file.xattr["user.rory_mime_type"].should eq("text/plain")
+      end
+
+      path = URI.parse(response.body.lines[1]).path
+      File.open(file_path(path)) do |file|
+        file.gets_to_end.should eq(%q({"foo": "bar"}))
+        file.xattr["user.rory_mime_type"].should eq("application/json")
       end
     end
 
