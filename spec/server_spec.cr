@@ -132,5 +132,16 @@ describe Rory::Server do
       response.content_type.should eq("text/plain")
       response.body.should eq("Uploads must be multipart/form-data")
     end
+
+    it "errors on unknown field name" do
+      response = formdata_request("POST", "/upload") do |builder|
+        builder.file("file[]", IO::Memory.new("foo"))
+        builder.file("file", IO::Memory.new(%q({"foo": "bar"})))
+      end
+      response.status.should eq(HTTP::Status::BAD_REQUEST)
+
+      response.content_type.should eq("text/plain")
+      response.body.should eq("Unknown form field \"file[]\"")
+    end
   end
 end

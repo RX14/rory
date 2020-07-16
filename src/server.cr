@@ -56,6 +56,8 @@ class Rory::Server
         end
 
         ctx.response.puts @url_base.resolve(id)
+      else
+        error(ctx, :bad_request, "Unknown form field #{part.name.inspect}")
       end
     end
   end
