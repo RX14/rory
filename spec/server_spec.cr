@@ -117,6 +117,76 @@ describe Rory::Server do
       end
     end
 
+    describe "user-provided filename" do
+      it "uploads" do
+        response = formdata_request("POST", "/upload") do |builder|
+          builder.file("file", IO::Memory.new("foo"),
+            metadata: HTTP::FormData::FileMetadata.new("test.cr"),
+            headers: HTTP::Headers{"X-Rory-Use-Filename" => "yes"})
+          builder.file("file", IO::Memory.new("foo"))
+        end
+        response.status.should eq(HTTP::Status::OK)
+
+        response.content_type.should eq("text/plain")
+        response.body.lines.size.should eq(2)
+        response.body.lines.each &.should start_with("https://example.com/")
+
+        response.body.lines[0].should eq("https://example.com/test.cr")
+        File.open(file_path("test.cr")) do |file|
+          file.gets_to_end.should eq("foo")
+          file.xattr["user.rory_mime_type"].should eq("text/plain")
+
+          file.delete
+        end
+
+        path = URI.parse(response.body.lines[1]).path
+        File.open(file_path(path)) do |file|
+          file.gets_to_end.should eq("foo")
+          file.xattr["user.rory_mime_type"].should eq("text/plain")
+        end
+      end
+
+      it "errors on no filename supplied" do
+        response = formdata_request("POST", "/upload") do |builder|
+          builder.file("file", IO::Memory.new("foo"),
+            headers: HTTP::Headers{"X-Rory-Use-Filename" => "yes"})
+        end
+        response.status.should eq(HTTP::Status::BAD_REQUEST)
+
+        response.content_type.should eq("text/plain")
+        response.body.should eq("No filename supplied with X-Rory-Use-Filename")
+      end
+
+      it "errors on filename conflict" do
+        response = formdata_request("POST", "/upload") do |builder|
+          builder.file("file", IO::Memory.new("foo"),
+            metadata: HTTP::FormData::FileMetadata.new("test.cr"),
+            headers: HTTP::Headers{"X-Rory-Use-Filename" => "yes"})
+        end
+        response.status.should eq(HTTP::Status::OK)
+
+        response.content_type.should eq("text/plain")
+        response.body.should eq("https://example.com/test.cr\n")
+
+        response = formdata_request("POST", "/upload") do |builder|
+          builder.file("file", IO::Memory.new("bar"),
+            metadata: HTTP::FormData::FileMetadata.new("test.cr"),
+            headers: HTTP::Headers{"X-Rory-Use-Filename" => "yes"})
+        end
+        response.status.should eq(HTTP::Status::BAD_REQUEST)
+
+        response.content_type.should eq("text/plain")
+        response.body.should eq("File name \"test.cr\" already exists")
+
+        File.open(file_path("test.cr")) do |file|
+          file.gets_to_end.should eq("foo")
+          file.xattr["user.rory_mime_type"].should eq("text/plain")
+
+          file.delete
+        end
+      end
+    end
+
     it "errors on missing Content-Type" do
       response = request("POST", "/upload")
       response.status.should eq(HTTP::Status::UNSUPPORTED_MEDIA_TYPE)

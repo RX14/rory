@@ -44,8 +44,14 @@ class Rory::Server
     HTTP::FormData.parse(ctx.request) do |part|
       case part.name
       when "file"
-        id = Rory.proquint(Random::Secure.random_bytes(4))
-        file_path = @storage_path/id
+        if part.headers["X-Rory-Use-Filename"]?.try(&.downcase).in?("yes", "true")
+          file_name = part.filename || error(ctx, :bad_request, "No filename supplied with X-Rory-Use-Filename")
+        else
+          file_name = Rory.proquint(Random::Secure.random_bytes(4))
+        end
+        file_path = @storage_path/file_name
+
+        error(ctx, :bad_request, "File name #{file_name.inspect} already exists") if File.exists?(file_path)
 
         File.open(file_path, "w") do |file|
           IO.copy(part.body, file)
@@ -55,7 +61,7 @@ class Rory::Server
           file.xattr["user.rory_mime_type"] = content_type
         end
 
-        ctx.response.puts @url_base.resolve(id)
+        ctx.response.puts @url_base.resolve(file_name)
       else
         error(ctx, :bad_request, "Unknown form field #{part.name.inspect}")
       end
