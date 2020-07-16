@@ -57,7 +57,11 @@ class Rory::Server
           IO.copy(part.body, file)
           file.flush
 
-          content_type = part.headers["Content-Type"]? || guess_mime_type(file_path)
+          if part.headers["X-Rory-Use-Content-Type"]?.try(&.downcase).in?("yes", "true")
+            content_type = part.headers["Content-Type"]? || guess_mime_type(file_path)
+          else
+            content_type = guess_mime_type(file_path)
+          end
           file.xattr["user.rory_mime_type"] = content_type
         end
 

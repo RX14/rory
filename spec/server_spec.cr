@@ -88,8 +88,10 @@ describe Rory::Server do
     it "supports user-provided mime type" do
       response = formdata_request("POST", "/upload") do |builder|
         builder.file("file", IO::Memory.new(%q({"foo": "bar"})),
+          headers: HTTP::Headers{"Content-Type"            => "text/plain",
+                                 "X-Rory-Use-Content-Type" => "Yes"})
+        builder.file("file", IO::Memory.new(%q({"foo": "bar"})),
           headers: HTTP::Headers{"Content-Type" => "text/plain"})
-        builder.file("file", IO::Memory.new(%q({"foo": "bar"})))
       end
       response.status.should eq(HTTP::Status::OK)
 
