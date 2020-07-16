@@ -32,6 +32,16 @@ private def file_path(*args)
   Path.new(ENV["RORY_STORAGE_PATH"]).join(*args)
 end
 
+private def check_file(url : String, content : String, mime_type : String)
+  path = URI.parse(url).path
+  File.open(file_path(path)) do |file|
+    file.gets_to_end.should eq(content)
+    file.xattr["user.rory_mime_type"].should eq(mime_type)
+  ensure
+    file.delete
+  end
+end
+
 describe Rory::Server do
   describe "POST /upload" do
     it "uploads files" do
@@ -44,11 +54,7 @@ describe Rory::Server do
       response.body.should start_with("https://example.com/")
       response.body.lines.size.should eq(1)
 
-      path = URI.parse(response.body).path
-      File.open(file_path(path)) do |file|
-        file.gets_to_end.should eq("hello world")
-        file.xattr["user.rory_mime_type"].should eq("text/plain")
-      end
+      check_file(response.body, "hello world", "text/plain")
     end
 
     it "uploads multiple files" do
@@ -62,17 +68,8 @@ describe Rory::Server do
       response.body.lines.size.should eq(2)
       response.body.lines.each &.should start_with("https://example.com/")
 
-      path = URI.parse(response.body.lines[0]).path
-      File.open(file_path(path)) do |file|
-        file.gets_to_end.should eq("file1")
-        file.xattr["user.rory_mime_type"].should eq("text/plain")
-      end
-
-      path = URI.parse(response.body.lines[1]).path
-      File.open(file_path(path)) do |file|
-        file.gets_to_end.should eq("file2")
-        file.xattr["user.rory_mime_type"].should eq("text/plain")
-      end
+      check_file(response.body.lines[0], "file1", "text/plain")
+      check_file(response.body.lines[1], "file2", "text/plain")
     end
 
     it "guesses mime type" do
@@ -85,11 +82,7 @@ describe Rory::Server do
       response.body.should start_with("https://example.com/")
       response.body.lines.size.should eq(1)
 
-      path = URI.parse(response.body).path
-      File.open(file_path(path)) do |file|
-        file.gets_to_end.should eq("")
-        file.xattr["user.rory_mime_type"].should eq("inode/x-empty")
-      end
+      check_file(response.body, "", "inode/x-empty")
     end
 
     it "supports user-provided mime type" do
@@ -104,17 +97,8 @@ describe Rory::Server do
       response.body.lines.size.should eq(2)
       response.body.lines.each &.should start_with("https://example.com/")
 
-      path = URI.parse(response.body.lines[0]).path
-      File.open(file_path(path)) do |file|
-        file.gets_to_end.should eq(%q({"foo": "bar"}))
-        file.xattr["user.rory_mime_type"].should eq("text/plain")
-      end
-
-      path = URI.parse(response.body.lines[1]).path
-      File.open(file_path(path)) do |file|
-        file.gets_to_end.should eq(%q({"foo": "bar"}))
-        file.xattr["user.rory_mime_type"].should eq("application/json")
-      end
+      check_file(response.body.lines[0], %q({"foo": "bar"}), "text/plain")
+      check_file(response.body.lines[1], %q({"foo": "bar"}), "application/json")
     end
 
     describe "user-provided filename" do
@@ -132,18 +116,8 @@ describe Rory::Server do
         response.body.lines.each &.should start_with("https://example.com/")
 
         response.body.lines[0].should eq("https://example.com/test.cr")
-        File.open(file_path("test.cr")) do |file|
-          file.gets_to_end.should eq("foo")
-          file.xattr["user.rory_mime_type"].should eq("text/plain")
-
-          file.delete
-        end
-
-        path = URI.parse(response.body.lines[1]).path
-        File.open(file_path(path)) do |file|
-          file.gets_to_end.should eq("foo")
-          file.xattr["user.rory_mime_type"].should eq("text/plain")
-        end
+        check_file(response.body.lines[0], "foo", "text/plain")
+        check_file(response.body.lines[1], "foo", "text/plain")
       end
 
       it "errors on no filename supplied" do
@@ -178,12 +152,7 @@ describe Rory::Server do
         response.content_type.should eq("text/plain")
         response.body.should eq("File name \"test.cr\" already exists")
 
-        File.open(file_path("test.cr")) do |file|
-          file.gets_to_end.should eq("foo")
-          file.xattr["user.rory_mime_type"].should eq("text/plain")
-
-          file.delete
-        end
+        check_file("https://example.com/test.cr", "foo", "text/plain")
       end
     end
 
