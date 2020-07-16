@@ -39,6 +39,8 @@ class Rory::Server
       error(ctx, :unsupported_media_type, "Uploads must be multipart/form-data")
     end
 
+    ctx.response.content_type = "text/plain"
+
     HTTP::FormData.parse(ctx.request) do |part|
       case part.name
       when "file"
@@ -53,7 +55,6 @@ class Rory::Server
           file.xattr["user.rory_mime_type"] = content_type
         end
 
-        ctx.response.content_type = "text/plain"
         ctx.response.puts @url_base.resolve(id)
       end
     end
