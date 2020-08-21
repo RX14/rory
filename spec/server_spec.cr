@@ -241,6 +241,14 @@ describe Rory::Server do
     end
   end
 
+  it "returns Method Not Allowed on non-POST /upload" do
+    response = formdata_request("GET", "/upload") do |builder|
+      builder.file("file", IO::Memory.new("hello world"))
+    end
+    response.status.should eq(HTTP::Status::METHOD_NOT_ALLOWED)
+    response.headers["Allow"].should eq("POST")
+  end
+
   describe "GET /:file" do
     it "serves files" do
       response = formdata_request("POST", "/upload") do |builder|
@@ -273,7 +281,8 @@ describe Rory::Server do
 
       url = URI.parse(response.body)
       response = request("POST", url.path)
-      response.status_code.should eq(405)
+      response.status.should eq(HTTP::Status::METHOD_NOT_ALLOWED)
+      response.headers["Allow"].should eq("GET")
 
       File.delete(file_path(url.path))
     end

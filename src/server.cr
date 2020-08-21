@@ -34,7 +34,8 @@ class Rory::Server
       when "POST"
         upload_request(context)
       else
-        context.response.respond_with_status(:method_not_allowed)
+        context.response.headers["Allow"] = "POST"
+        return context.response.status = :method_not_allowed
       end
     else
       file_request(context)
@@ -46,7 +47,8 @@ class Rory::Server
     file_path = @storage_path/ctx.request.path
     if File.exists?(file_path)
       unless ctx.request.method == "GET"
-        return ctx.response.respond_with_status(:method_not_allowed)
+        ctx.response.headers["Allow"] = "GET"
+        return ctx.response.status = :method_not_allowed
       end
 
       File.open(file_path) do |file|
