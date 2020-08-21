@@ -1,7 +1,7 @@
 FROM alpine:3.12
 
 RUN apk add --no-cache crystal shards \
-                       musl-dev zlib-dev openssl-dev \
+                       musl-dev zlib-dev openssl-dev file \
  && adduser --uid 7865 --system rory
 USER rory
 
