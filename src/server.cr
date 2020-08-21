@@ -29,6 +29,8 @@ class Rory::Server
 
   def request(context : HTTP::Server::Context)
     case context.request.path
+    when "/"
+      context.response.respond_with_status(:not_found)
     when "/upload"
       case context.request.method
       when "POST"

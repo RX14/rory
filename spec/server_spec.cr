@@ -250,6 +250,11 @@ describe Rory::Server do
   end
 
   describe "GET /:file" do
+    it "always returns 404 on /" do
+      response = request("GET", "/")
+      response.status_code.should eq(404)
+    end
+
     it "serves files" do
       response = formdata_request("POST", "/upload") do |builder|
         builder.file("file", IO::Memory.new("hello world"))
