@@ -240,4 +240,42 @@ describe Rory::Server do
       response.body.should eq("Unknown form field \"file[]\"")
     end
   end
+
+  describe "GET /:file" do
+    it "serves files" do
+      response = formdata_request("POST", "/upload") do |builder|
+        builder.file("file", IO::Memory.new("hello world"))
+      end
+      response.status.should eq(HTTP::Status::OK)
+
+      url = URI.parse(response.body)
+      response = request("GET", url.path)
+
+      response.status_code.should eq(200)
+      response.body.should eq("hello world")
+      response.content_type.should eq("text/plain")
+      response.headers["Content-Length"].should eq("11")
+
+      File.delete(file_path(url.path))
+    end
+
+    it "returns 404 on file not existing" do
+      response = request("GET", "/nonexistant")
+
+      response.status_code.should eq(404)
+    end
+
+    it "returns method not allowed on wrong method" do
+      response = formdata_request("POST", "/upload") do |builder|
+        builder.file("file", IO::Memory.new("hello world"))
+      end
+      response.status.should eq(HTTP::Status::OK)
+
+      url = URI.parse(response.body)
+      response = request("POST", url.path)
+      response.status_code.should eq(405)
+
+      File.delete(file_path(url.path))
+    end
+  end
 end

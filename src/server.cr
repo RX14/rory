@@ -37,9 +37,26 @@ class Rory::Server
         context.response.respond_with_status(:method_not_allowed)
       end
     else
-      context.response.respond_with_status(:not_found)
+      file_request(context)
     end
   rescue ignored : Error
+  end
+
+  private def file_request(ctx)
+    file_path = @storage_path/ctx.request.path
+    if File.exists?(file_path)
+      unless ctx.request.method == "GET"
+        return ctx.response.respond_with_status(:method_not_allowed)
+      end
+
+      File.open(file_path) do |file|
+        ctx.response.content_length = file.size
+        ctx.response.content_type = file.xattr["user.rory_mime_type"]
+        IO.copy(file, ctx.response)
+      end
+    else
+      ctx.response.respond_with_status(:not_found)
+    end
   end
 
   private def upload_request(ctx)
